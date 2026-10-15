@@ -1,0 +1,96 @@
+name: Bynk Dev
+description: >-
+  Serve a Bynk project locally with `bynk dev`, run a script against it, and
+  shut it down. For end-to-end checks of a Bynk app.
+author: bynk-lang
+
+branding:
+  icon: play-circle
+  color: purple
+
+inputs:
+  run:
+    description: >-
+      The script to run once the app answers. It runs under `bash -eo
+      pipefail` with `BYNK_DEV_URL` (the first context's base URL),
+      `BYNK_DEV_PORTS` (every served context's port, in sorted order),
+      `BYNK_DEV_URL_<WORKER>` (one per context, such as `BYNK_DEV_URL_PAIR_WEB`)
+      and `BYNK_DEV_LOG` (the server log) set. The step
+      fails if it exits non-zero.
+    required: true
+  version:
+    description: Bynk version to install (passed to setup-bynk).
+    required: false
+    default: latest
+  repository:
+    description: The owner/name repo that publishes Bynk releases.
+    required: false
+    default: accuser/bynk
+  working-directory:
+    description: Project root, the directory that holds `bynk.toml`.
+    required: false
+    default: "."
+  context:
+    description: >-
+      Serve only these contexts (`--context`), whitespace-separated. Empty
+      serves every context with the Service Bindings between them wired.
+    required: false
+    default: ""
+  base-port:
+    description: The first context's port (`--base-port`); later contexts take the following ports in sorted order.
+    required: false
+    default: "8787"
+  wrangler-args:
+    description: >-
+      Arguments forwarded to `wrangler dev` after `--`, split on whitespace
+      (no shell quoting), such as `--var AUTH_JWT_SECRET:test` or
+      `--test-scheduled`.
+    required: false
+    default: ""
+  ready-path:
+    description: >-
+      The path polled on every context's port. Any answer below 500 counts,
+      including a 404 or 401: the server is up. A 5xx or no answer means not
+      yet. With more than one context, poll a route that crosses a Service
+      Binding, because the first call across one fails until it has connected.
+    required: false
+    default: /
+  ready-timeout:
+    description: Seconds to wait for every context to answer.
+    required: false
+    default: "120"
+  node-version:
+    description: Node.js version to set up for Wrangler. The driver needs 22 or later.
+    required: false
+    default: "22"
+  github-token:
+    description: Token for setup-bynk's API calls.
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install Bynk
+      uses: bynk-lang/setup-bynk@v1
+      with:
+        version: ${{ inputs.version }}
+        repository: ${{ inputs.repository }}
+        github-token: ${{ inputs.github-token }}
+
+    - name: Set up Node.js
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Serve and run
+      shell: bash
+      env:
+        INPUT_RUN: ${{ inputs.run }}
+        INPUT_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        INPUT_CONTEXT: ${{ inputs.context }}
+        INPUT_BASE_PORT: ${{ inputs.base-port }}
+        INPUT_WRANGLER_ARGS: ${{ inputs.wrangler-args }}
+        INPUT_READY_PATH: ${{ inputs.ready-path }}
+        INPUT_READY_TIMEOUT: ${{ inputs.ready-timeout }}
+      run: ${{ github.action_path }}/scripts/dev.sh

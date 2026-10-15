@@ -1,0 +1,114 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Bynk version to test, exact or "latest" (empty for the pinned baseline)
+        type: string
+        default: ""
+  # bynk-canary.yml calls this at each new Bynk release, so the scenarios
+  # below also run against releases newer than the baseline.
+  workflow_call:
+    inputs:
+      version:
+        description: Bynk version to test, exact or "latest" (empty for the pinned baseline)
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+# Push and pull_request runs use the pinned baseline, so a red build means the
+# change broke something, not that a new compiler came out. Bump it
+# deliberately.
+env:
+  BYNK_VERSION: ${{ inputs.version || '0.330.4' }}
+
+jobs:
+  single:
+    name: One context (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./
+        with:
+          version: ${{ env.BYNK_VERSION }}
+          working-directory: test/fixtures/hello
+          wrangler-args: --var FROM_TEST:1
+          run: |
+            test "$(curl -fsS "$BYNK_DEV_URL/hello/Ada")" = '"Hello, Ada!"'
+            test "$BYNK_DEV_PORTS" = 8787
+            test -s "$BYNK_DEV_LOG"
+
+      - name: Nothing is left running
+        shell: bash
+        run: |
+          if curl -s -o /dev/null --max-time 2 http://localhost:8787/; then
+            echo "::error::the server outlived the action"
+            exit 1
+          fi
+
+  pair:
+    name: Two contexts over a Service Binding (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./
+        with:
+          version: ${{ env.BYNK_VERSION }}
+          working-directory: test/fixtures/pair
+          # The first call across a Service Binding fails until it connects.
+          ready-path: /answer
+          run: |
+            test "$BYNK_DEV_PORTS" = "8787 8788"
+            test "$(curl -fsS "$BYNK_DEV_URL_PAIR_WEB/answer")" = '"42"'
+
+  # The action must fail, and tear down, when the script does, and when the
+  # project does not build.
+  failures:
+    name: Failures fail (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: A failing script
+        id: script
+        continue-on-error: true
+        uses: ./
+        with:
+          version: ${{ env.BYNK_VERSION }}
+          working-directory: test/fixtures/hello
+          run: curl -fsS "$BYNK_DEV_URL/no-such-route"
+
+      - name: A project that does not build
+        id: build
+        continue-on-error: true
+        uses: ./
+        with:
+          version: ${{ env.BYNK_VERSION }}
+          working-directory: test/fixtures/broken
+          ready-timeout: "60"
+          run: "true"
+
+      - name: Both failed
+        shell: bash
+        env:
+          SCRIPT: ${{ steps.script.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+        run: |
+          test "$SCRIPT" = failure
+          test "$BUILD" = failure

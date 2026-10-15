@@ -1,0 +1,10 @@
+context pair.web
+
+consumes pair.doubler as Doubler
+
+service api from http {
+	on GET("/answer") () -> Effect[HttpResult[String]] by Visitor {
+		let d <- Doubler.double(21)
+		Ok("\(d)")
+	}
+}

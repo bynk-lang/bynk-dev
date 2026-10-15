@@ -1,0 +1,5 @@
+out/
+out-js/
+node_modules/
+.wrangler/
+.bynk/

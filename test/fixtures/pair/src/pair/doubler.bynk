@@ -1,0 +1,5 @@
+context pair.doubler
+
+service double {
+	on call(n: Int) -> Effect[Int] { n * 2 }
+}

@@ -1,0 +1,4 @@
+# Two contexts, one calling the other over a Service Binding.
+[project]
+name = "pair"
+version = "0.1.0"
