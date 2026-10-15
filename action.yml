@@ -63,6 +63,14 @@ inputs:
     description: Node.js version to set up for Wrangler. The driver needs 22 or later.
     required: false
     default: "22"
+  wrangler-version:
+    description: >-
+      Wrangler version to install globally before the server starts (an npm
+      version or range, such as `4`). `bynk dev` otherwise fetches Wrangler
+      with `npx`, and with two or more contexts the parallel installs race in
+      npm's cache. Empty leaves Wrangler to `bynk dev`.
+    required: false
+    default: "4"
   github-token:
     description: Token for setup-bynk's API calls.
     required: false
@@ -82,6 +90,13 @@ runs:
       uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
       with:
         node-version: ${{ inputs.node-version }}
+
+    - name: Install Wrangler
+      if: inputs.wrangler-version != ''
+      shell: bash
+      env:
+        WRANGLER_VERSION: ${{ inputs.wrangler-version }}
+      run: npm install --global "wrangler@$WRANGLER_VERSION"
 
     - name: Serve and run
       shell: bash
