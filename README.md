@@ -82,6 +82,7 @@ can sign its own token. `--test-scheduled` lets you fire a cron handler by hand.
 | `ready-path`        | `/`            | The path polled on every context's port. Any answer below 500 is ready. |
 | `ready-timeout`     | `120`          | Seconds to wait for every context. |
 | `node-version`      | `22`           | Node.js for Wrangler. The driver needs 22 or later. |
+| `wrangler-version`  | `4`            | Wrangler to install globally first. Empty leaves it to `bynk dev`'s `npx`. |
 | `github-token`      | `${{ github.token }}` | Token for setup-bynk. |
 
 ## Environment for the script
@@ -101,6 +102,10 @@ routes, so with more than one context prefer `BYNK_DEV_URL_<WORKER>`.
 - **`--inspect` is always on.** With two or more contexts, `bynk dev` without it
   starts every `wrangler dev` on the default inspector port at once, and all but
   one die with "Address already in use". `--inspect` gives each its own port.
+- **Wrangler is installed up front.** Left to itself, `bynk dev` fetches Wrangler
+  with `npx`, and with two or more contexts the parallel installs race in npm's
+  cache (`ENOTEMPTY`), so a context dies at boot. Installing it once puts it on
+  `PATH`, where `bynk dev` finds it.
 - **Teardown kills the process group.** `bynk dev` does not stop its `workerd`
   children when it is signalled on its own, so the action starts it in its own
   process group and signals the group.
