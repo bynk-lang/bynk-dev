@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: bynk-lang/bynk-dev@v1
         with:
-          version: 0.330.4
+          version: 0.377.2
           run: |
             test "$(curl -fsS "$BYNK_DEV_URL/hello/Ada")" = '"Hello, Ada!"'
 ```

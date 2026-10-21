@@ -26,7 +26,7 @@ permissions:
 # change broke something, not that a new compiler came out. Bump it
 # deliberately.
 env:
-  BYNK_VERSION: ${{ inputs.version || '0.330.4' }}
+  BYNK_VERSION: ${{ inputs.version || '0.377.2' }}
 
 jobs:
   single:
