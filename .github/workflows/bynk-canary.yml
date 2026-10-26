@@ -48,3 +48,6 @@ jobs:
       upstream-result: ${{ needs.scenarios.result }}
       kind: action
       ci: false
+      bump: true            # propose moving BYNK_VERSION to a newer release that passes
+      bump-auto-merge: true # and merge that once its checks pass
+    secrets: inherit        # the bump App's BUMP_APP_ID and BUMP_APP_KEY
