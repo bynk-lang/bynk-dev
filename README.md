@@ -74,6 +74,7 @@ can sign its own token. `--test-scheduled` lets you fire a cron handler by hand.
 | ------------------- | -------------- | ----------- |
 | `run`               |                | **Required.** The script to run once the app answers. |
 | `version`           | `latest`       | Bynk version (forwarded to setup-bynk). |
+| `version-file`      | `""`           | A file holding an exact version, such as `BYNK_VERSION`, relative to the workspace. Use this or `version`, not both. |
 | `repository`        | `bynk-lang/bynk` | Release repository. |
 | `working-directory` | `.`            | Project root, the directory that holds `bynk.toml`. |
 | `context`           | empty          | Serve only these contexts (`--context`), whitespace-separated. Empty serves all. |

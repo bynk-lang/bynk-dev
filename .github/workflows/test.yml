@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Bynk version to test, exact or "latest" (empty for the pinned baseline)
+        description: Bynk version to test, exact or "latest" (empty for BYNK_VERSION)
         type: string
         default: ""
   # bynk-canary.yml calls this at each new Bynk release, so the scenarios
@@ -15,18 +15,18 @@ on:
   workflow_call:
     inputs:
       version:
-        description: Bynk version to test, exact or "latest" (empty for the pinned baseline)
+        description: Bynk version to test, exact or "latest" (empty for BYNK_VERSION)
         type: string
         default: ""
 
 permissions:
   contents: read
 
-# Push and pull_request runs use the pinned baseline, so a red build means the
-# change broke something, not that a new compiler came out. Bump it
-# deliberately.
+# Push and pull_request runs use the version in BYNK_VERSION, so a red build
+# means the change broke something, not that a new compiler came out. The
+# canary proposes moving it once a newer release passes.
 env:
-  BYNK_VERSION: ${{ inputs.version || '0.377.2' }}
+  REQUESTED: ${{ inputs.version }}
 
 jobs:
   single:
@@ -38,6 +38,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Choose the Bynk version
+        shell: bash
+        run: echo "BYNK_VERSION=${REQUESTED:-$(tr -d '[:space:]' < BYNK_VERSION)}" >> "$GITHUB_ENV"
+
 
       - uses: ./
         with:
@@ -66,6 +70,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Choose the Bynk version
+        shell: bash
+        run: echo "BYNK_VERSION=${REQUESTED:-$(tr -d '[:space:]' < BYNK_VERSION)}" >> "$GITHUB_ENV"
+
 
       - uses: ./
         with:
@@ -84,6 +92,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Choose the Bynk version
+        shell: bash
+        run: echo "BYNK_VERSION=${REQUESTED:-$(tr -d '[:space:]' < BYNK_VERSION)}" >> "$GITHUB_ENV"
+
 
       - name: A failing script
         id: script
@@ -112,3 +124,53 @@ jobs:
         run: |
           test "$SCRIPT" = failure
           test "$BUILD" = failure
+
+  # version-file reads the pin from a file (BYNK_VERSION here), by the same
+  # rules as setup-bynk's: one exact version, and not together with version.
+  version-file:
+    name: The version comes from a file
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: A version file
+        uses: ./
+        with:
+          version-file: BYNK_VERSION
+          working-directory: test/fixtures/hello
+          run: curl -fsS "$BYNK_DEV_URL/hello/Ada"
+
+      - name: A version file and a version
+        id: both
+        continue-on-error: true
+        uses: ./
+        with:
+          version: 0.404.0
+          version-file: BYNK_VERSION
+          working-directory: test/fixtures/hello
+          run: "true"
+
+      - name: A version file that does not exist
+        id: missing
+        continue-on-error: true
+        uses: ./
+        with:
+          version-file: NO_SUCH_FILE
+          working-directory: test/fixtures/hello
+          run: "true"
+
+      - name: Assert
+        shell: bash
+        env:
+          BOTH: ${{ steps.both.outcome }}
+          MISSING: ${{ steps.missing.outcome }}
+        run: |
+          failed=0
+          want="bynkc $(tr -d '[:space:]' < BYNK_VERSION)"; want="${want/bynkc v/bynkc }"
+          got="$(bynkc --version)"
+          [ "$got" = "$want" ] || { echo "::error::installed '$got', BYNK_VERSION says '$want'"; failed=1; }
+          [ "$BOTH" = failure ] || { echo "::error::version-file with version was '$BOTH', expected failure"; failed=1; }
+          [ "$MISSING" = failure ] || { echo "::error::a missing version-file was '$MISSING', expected failure"; failed=1; }
+          exit "$failed"
