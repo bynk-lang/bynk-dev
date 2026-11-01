@@ -1,0 +1,6 @@
+# Two contexts for the smoke: `smoke.ok`, whose routes answer, and
+# `smoke.boom`, with a route that answers 500, the defect a smoke exists to
+# find.
+[project]
+name = "smoke"
+version = "0.1.0"

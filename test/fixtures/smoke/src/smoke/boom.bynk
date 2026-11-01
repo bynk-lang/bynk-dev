@@ -1,0 +1,7 @@
+context smoke.boom
+
+service api from http {
+	on GET("/boom") () -> Effect[HttpResult[String]] by Visitor {
+		ServerError("boom")
+	}
+}

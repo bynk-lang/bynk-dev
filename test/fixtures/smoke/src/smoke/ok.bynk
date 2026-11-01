@@ -1,0 +1,15 @@
+context smoke.ok
+
+// Refined, so `Val` can fabricate it: `--smoke` does not yet build a case
+// for a bare `String` path parameter.
+type Name = String where NonEmpty && MaxLength(40)
+
+service api from http {
+	on GET("/ping") () -> Effect[HttpResult[String]] by Visitor {
+		Ok("pong")
+	}
+
+	on GET("/hello/:name") (name: Name) -> Effect[HttpResult[String]] by Visitor {
+		Ok("Hello, \(name)!")
+	}
+}

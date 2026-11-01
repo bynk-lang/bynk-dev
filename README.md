@@ -1,7 +1,7 @@
 # bynk-dev
 
 Serve a Bynk project locally with `bynk dev`, run a script against it, and shut
-it down. It is the end-to-end half of a Bynk app's CI: `bynk-ci` shows the
+it down, or smoke-test every route with `bynk test --smoke`. It is the end-to-end half of a Bynk app's CI: `bynk-ci` shows the
 project builds and its unit tests pass, and this shows the running app answers
 the way it should.
 
@@ -68,11 +68,53 @@ Anything after `--` on the `wrangler dev` command line goes in `wrangler-args`:
 `--var` supplies a secret a `Bearer` or `Signature` actor reads, so the script
 can sign its own token. `--test-scheduled` lets you fire a cron handler by hand.
 
+### Smoke-testing every route
+
+`smoke: true` runs `bynk test --smoke --against dev`. It calls every `from http`
+route with arguments `Val` fabricates, and needs no script:
+
+```yaml
+- uses: bynk-lang/bynk-dev@v1
+  id: smoke
+  with:
+    smoke: true
+    smoke-format: json
+- uses: actions/upload-artifact@v4
+  if: always()
+  with:
+    name: smoke
+    path: ${{ steps.smoke.outputs.smoke-report }}
+```
+
+A case fails on a 5xx, on a route with a JSON body that accepts a malformed
+one, or on a route behind an actor that accepts a call with no credential. The
+step fails if any case does. A route whose arguments `Val` cannot fabricate,
+such as a `String where Matches(…)` parameter, is skipped and named. The check
+stays current as routes are added. See
+[Smoke-testing every route](https://bynk-lang.org/docs/bynk-cli/#smoke-testing-every-route)
+for what each case sends.
+
+`bynk test --against dev` starts and stops its own `bynk dev`, so under `smoke`:
+
+- **Every context is served**, with the Service Bindings wired. `context`
+  narrows the routes called (`--suite`), by their dotted names.
+- **Ports and readiness are its own.** `base-port`, `ready-path` and
+  `ready-timeout` apply only to `run`.
+- **Every declared secret is set to a test value**, which the smoke signs
+  with. `wrangler-args` does not reach it. Set alone with `smoke`, it fails
+  the step rather than being dropped.
+
+Give `run` as well and the script runs first, against the action's own
+`bynk dev`, then the smoke. `smoke` needs a Bynk release with
+`bynk test --smoke`; an older one fails the step and says so.
+
 ## Inputs
 
 | Input               | Default        | Description |
 | ------------------- | -------------- | ----------- |
-| `run`               |                | **Required.** The script to run once the app answers. |
+| `run`               | `""`           | The script to run once the app answers. Give this, `smoke`, or both. |
+| `smoke`             | `false`        | `true` runs `bynk test --smoke --against dev`, after `run` if both are given. |
+| `smoke-format`      | `rich`         | The smoke's `--format`: `rich`, `json` or `ndjson`. |
 | `version`           | `latest`       | Bynk version (forwarded to setup-bynk). |
 | `version-file`      | `""`           | A file holding an exact version, such as `BYNK_VERSION`, relative to the workspace. Use this or `version`, not both. |
 | `repository`        | `bynk-lang/bynk` | Release repository. |
@@ -85,6 +127,12 @@ can sign its own token. `--test-scheduled` lets you fire a cron handler by hand.
 | `node-version`      | `22`           | Node.js for Wrangler. The driver needs 22 or later. |
 | `wrangler-version`  | `4`            | Wrangler to install globally first. Empty leaves it to `bynk dev`'s `npx`. |
 | `github-token`      | `${{ github.token }}` | Token for setup-bynk. |
+
+## Outputs
+
+| Output         | Value |
+| -------------- | ----- |
+| `smoke-report` | The file holding the smoke's output, in `smoke-format`, when `smoke` is true. |
 
 ## Environment for the script
 
@@ -103,6 +151,9 @@ routes, so with more than one context prefer `BYNK_DEV_URL_<WORKER>`.
 - **`--inspect` is always on.** With two or more contexts, `bynk dev` without it
   starts every `wrangler dev` on the default inspector port at once, and all but
   one die with "Address already in use". `--inspect` gives each its own port.
+- **TypeScript is installed for the smoke.** `bynk test` compiles its runner
+  with `tsc` (or runs it with `tsx`), so with `smoke` the action installs
+  `typescript` globally unless one of them is already on `PATH`.
 - **Wrangler is installed up front.** Left to itself, `bynk dev` fetches Wrangler
   with `npx`, and with two or more contexts the parallel installs race in npm's
   cache (`ENOTEMPTY`), so a context dies at boot. Installing it once puts it on
