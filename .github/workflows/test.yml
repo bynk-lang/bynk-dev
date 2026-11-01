@@ -116,14 +116,77 @@ jobs:
           ready-timeout: "60"
           run: "true"
 
-      - name: Both failed
+      - name: Neither a script nor a smoke
+        id: nothing
+        continue-on-error: true
+        uses: ./
+        with:
+          version: ${{ env.BYNK_VERSION }}
+          working-directory: test/fixtures/hello
+
+      - name: All failed
         shell: bash
         env:
           SCRIPT: ${{ steps.script.outcome }}
           BUILD: ${{ steps.build.outcome }}
+          NOTHING: ${{ steps.nothing.outcome }}
         run: |
           test "$SCRIPT" = failure
           test "$BUILD" = failure
+          test "$NOTHING" = failure
+
+  # smoke: true runs `bynk test --smoke --against dev`. A Bynk without
+  # `--smoke` must fail the step clearly. With it, the smoke must pass the
+  # fixture's `smoke.ok` context (chosen with `context`) and fail the whole
+  # fixture, whose `smoke.boom` has a route that answers 500.
+  smoke:
+    name: Smoke every route (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Choose the Bynk version
+        shell: bash
+        run: echo "BYNK_VERSION=${REQUESTED:-$(tr -d '[:space:]' < BYNK_VERSION)}" >> "$GITHUB_ENV"
+
+      - name: Routes that answer
+        id: ok
+        continue-on-error: true
+        uses: ./
+        with:
+          version: ${{ env.BYNK_VERSION }}
+          working-directory: test/fixtures/smoke
+          context: smoke.ok
+          smoke: true
+          smoke-format: json
+
+      - name: A route that answers 500
+        id: boom
+        continue-on-error: true
+        uses: ./
+        with:
+          version: ${{ env.BYNK_VERSION }}
+          working-directory: test/fixtures/smoke
+          smoke: true
+
+      - name: Assert
+        shell: bash
+        env:
+          OK: ${{ steps.ok.outcome }}
+          BOOM: ${{ steps.boom.outcome }}
+          REPORT: ${{ steps.ok.outputs.smoke-report }}
+        run: |
+          failed=0
+          if bynk test --help | grep -q -- --smoke; then
+            [ "$OK" = success ] || { echo "::error::the smoke of smoke.ok was '$OK', expected success"; failed=1; }
+            [ "$BOOM" = failure ] || { echo "::error::the smoke of the whole fixture was '$BOOM', expected failure"; failed=1; }
+            jq -e '.passed > 0 and .failed == 0' "$REPORT" >/dev/null \
+              || { echo "::error::smoke-report '$REPORT' is not a passing JSON result"; failed=1; }
+          else
+            echo "$(bynk --version) has no --smoke: both smokes must fail"
+            [ "$OK" = failure ] || { echo "::error::smoke on a Bynk without --smoke was '$OK', expected failure"; failed=1; }
+            [ "$BOOM" = failure ] || { echo "::error::smoke on a Bynk without --smoke was '$BOOM', expected failure"; failed=1; }
+          fi
+          exit "$failed"
 
   # version-file reads the pin from a file (BYNK_VERSION here), by the same
   # rules as setup-bynk's: one exact version, and not together with version.

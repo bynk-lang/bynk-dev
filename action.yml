@@ -1,7 +1,8 @@
 name: Bynk Dev
 description: >-
   Serve a Bynk project locally with `bynk dev`, run a script against it, and
-  shut it down. For end-to-end checks of a Bynk app.
+  shut it down, or smoke-test every route with `bynk test --smoke`. For
+  end-to-end checks of a Bynk app.
 author: bynk-lang
 
 branding:
@@ -16,8 +17,23 @@ inputs:
       `BYNK_DEV_PORTS` (every served context's port, in sorted order),
       `BYNK_DEV_URL_<WORKER>` (one per context, such as `BYNK_DEV_URL_PAIR_WEB`)
       and `BYNK_DEV_LOG` (the server log) set. The step
-      fails if it exits non-zero.
-    required: true
+      fails if it exits non-zero. Give this, smoke, or both.
+    required: false
+    default: ""
+  smoke:
+    description: >-
+      `true` runs `bynk test --smoke --against dev`, which starts its own
+      `bynk dev` and calls every `from http` route with arguments `Val`
+      fabricates. The step fails when any case does. With run as well, the
+      smoke runs after the script. Needs a Bynk release with `--smoke`.
+    required: false
+    default: "false"
+  smoke-format:
+    description: >-
+      The smoke's `--format`: `rich`, `json` or `ndjson`. The output is also
+      written to the file the smoke-report output names.
+    required: false
+    default: rich
   version:
     description: Bynk version to install (passed to setup-bynk).
     required: false
@@ -41,17 +57,22 @@ inputs:
     description: >-
       Serve only these contexts (`--context`), whitespace-separated. Empty
       serves every context with the Service Bindings between them wired.
+      Under smoke, every context is served and only these contexts' routes
+      are called (`--suite`), so give their dotted names.
     required: false
     default: ""
   base-port:
-    description: The first context's port (`--base-port`); later contexts take the following ports in sorted order.
+    description: >-
+      The first context's port (`--base-port`); later contexts take the
+      following ports in sorted order. The smoke picks its own ports.
     required: false
     default: "8787"
   wrangler-args:
     description: >-
       Arguments forwarded to `wrangler dev` after `--`, split on whitespace
       (no shell quoting), such as `--var AUTH_JWT_SECRET:test` or
-      `--test-scheduled`.
+      `--test-scheduled`. It does not reach the smoke, which sets every
+      declared secret to a test value, so with smoke it needs run too.
     required: false
     default: ""
   ready-path:
@@ -60,10 +81,11 @@ inputs:
       including a 404 or 401: the server is up. A 5xx or no answer means not
       yet. With more than one context, poll a route that crosses a Service
       Binding, because the first call across one fails until it has connected.
+      The smoke waits for readiness itself.
     required: false
     default: /
   ready-timeout:
-    description: Seconds to wait for every context to answer.
+    description: Seconds to wait for every context to answer (not the smoke).
     required: false
     default: "120"
   node-version:
@@ -83,9 +105,26 @@ inputs:
     required: false
     default: ${{ github.token }}
 
+outputs:
+  smoke-report:
+    description: The file holding the smoke's output, in smoke-format, when smoke is true.
+    value: ${{ steps.smoke.outputs.smoke-report }}
+
 runs:
   using: composite
   steps:
+    - name: Check the inputs
+      shell: bash
+      env:
+        INPUT_RUN: ${{ inputs.run }}
+        INPUT_SMOKE: ${{ inputs.smoke }}
+      run: |
+        case "$INPUT_SMOKE" in true | false) ;; *) echo "::error::bynk-dev: smoke must be true or false, got '$INPUT_SMOKE'" >&2; exit 2 ;; esac
+        if [ -z "$INPUT_RUN" ] && [ "$INPUT_SMOKE" != true ]; then
+          echo "::error::bynk-dev: give a run script, smoke: true, or both" >&2
+          exit 2
+        fi
+
     # Read here rather than by setup-bynk, so this works whichever setup-bynk
     # v1 is current. The same rules as setup-bynk's version-file.
     - name: Resolve the version input
@@ -127,7 +166,14 @@ runs:
         WRANGLER_VERSION: ${{ inputs.wrangler-version }}
       run: npm install --global "wrangler@$WRANGLER_VERSION"
 
+    # `bynk test` compiles its runner with `tsc` (or runs it with `tsx`).
+    - name: Install TypeScript
+      if: inputs.smoke == 'true'
+      shell: bash
+      run: command -v tsc >/dev/null 2>&1 || command -v tsx >/dev/null 2>&1 || npm install --global typescript
+
     - name: Serve and run
+      if: inputs.run != ''
       shell: bash
       env:
         INPUT_RUN: ${{ inputs.run }}
@@ -138,3 +184,15 @@ runs:
         INPUT_READY_PATH: ${{ inputs.ready-path }}
         INPUT_READY_TIMEOUT: ${{ inputs.ready-timeout }}
       run: ${{ github.action_path }}/scripts/dev.sh
+
+    - name: Smoke
+      id: smoke
+      if: inputs.smoke == 'true'
+      shell: bash
+      env:
+        INPUT_RUN: ${{ inputs.run }}
+        INPUT_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        INPUT_CONTEXT: ${{ inputs.context }}
+        INPUT_WRANGLER_ARGS: ${{ inputs.wrangler-args }}
+        INPUT_SMOKE_FORMAT: ${{ inputs.smoke-format }}
+      run: ${{ github.action_path }}/scripts/smoke.sh
