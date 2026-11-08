@@ -12,6 +12,8 @@ whether the script passed or not. `bynk dev` runs `wrangler dev` in local
 mode, so Workers, Durable Objects, KV and Service Bindings are simulated and
 nothing is provisioned.
 
+**It needs Bynk 0.512.9 or later** (setup-bynk v2 installs `bynk` and `bynk-lsp`, not `bynkc`). Pin an earlier bynk-dev release for older Bynk versions.
+
 ## Usage
 
 ```yaml
