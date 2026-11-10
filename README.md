@@ -24,13 +24,15 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: bynk-lang/bynk-dev@v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: bynk-lang/bynk-dev@ea406243fa3d07c1ab289eb6d1284927fd4ed67a # v1.4.2
         with:
           version: 0.377.2
           run: |
             test "$(curl -fsS "$BYNK_DEV_URL/hello/Ada")" = '"Hello, Ada!"'
 ```
+
+> The org requires actions pinned to a full commit SHA, so these examples name the commit for `v1.4.2` with the version in a comment, which Dependabot reads to propose updates. To pin another release, find its commit with `git ls-remote https://github.com/bynk-lang/bynk-dev 'refs/tags/v*^{}'`.
 
 The script runs under `bash -eo pipefail`, so the first failing command fails
 the step. On a failure the action prints the last 200 lines of the server log.
@@ -44,7 +46,7 @@ gives each its own port from `base-port` up, in sorted order. The action reads
 the ports from `bynk dev`'s own report, so you do not say how many there are.
 
 ```yaml
-- uses: bynk-lang/bynk-dev@v1
+- uses: bynk-lang/bynk-dev@ea406243fa3d07c1ab289eb6d1284927fd4ed67a # v1.4.2
   with:
     ready-path: /answer   # a route that crosses a Service Binding
     run: |
@@ -60,7 +62,7 @@ while it gets a 5xx, and starts your script on the first answer below 500.
 Anything after `--` on the `wrangler dev` command line goes in `wrangler-args`:
 
 ```yaml
-- uses: bynk-lang/bynk-dev@v1
+- uses: bynk-lang/bynk-dev@ea406243fa3d07c1ab289eb6d1284927fd4ed67a # v1.4.2
   with:
     wrangler-args: --var AUTH_JWT_SECRET:test-secret --test-scheduled
     run: |
@@ -76,12 +78,12 @@ can sign its own token. `--test-scheduled` lets you fire a cron handler by hand.
 route with arguments `Val` fabricates, and needs no script:
 
 ```yaml
-- uses: bynk-lang/bynk-dev@v1
+- uses: bynk-lang/bynk-dev@ea406243fa3d07c1ab289eb6d1284927fd4ed67a # v1.4.2
   id: smoke
   with:
     smoke: true
     smoke-format: json
-- uses: actions/upload-artifact@v4
+- uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
   if: always()
   with:
     name: smoke
